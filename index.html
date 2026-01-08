@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>VEX IQ Path Planner with Motor Encoding</title>
+        <style>
+            /* Base and reset */
+            body {
+                font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+                background-color: #0a1a2a;
+                color: #e0e6f1;
+                margin: 0;
+                padding: 1rem;
+                line-height: 1.6;
+                max-width: 1200px;
+                margin-left: auto;
+                margin-right: auto;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            }
+            h1 {
+                color: #1e40af;
+                margin: 1.5rem 0 0.3rem 0;
+                font-size: 2.5rem;
+                border-bottom: 3px solid #1e40af;
+                padding-bottom: 0.3rem;
+                width: 100%;
+                text-align: center;
+            }
+            #instructions {
+                margin-bottom: 1rem;
+                max-width: 500px;
+                text-align: center;
+                line-height: 1.4;
+            }
+            button {
+                padding: 8px 12px;
+                margin: 0 6px 6px 0;
+                background-color: #1e40af;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-weight: 600;
+                transition: background-color 0.3s ease;
+                user-select: none;
+            }
+            button:hover {
+                background-color: #3b82f6;
+            }
+            .save-btn {
+                background-color: #10b981;
+            }
+            .save-btn:hover {
+                background-color: #059669;
+            }
+            .clear-btn {
+                background-color: #ef4444;
+            }
+            .clear-btn:hover {
+                background-color: #dc2626;
+            }
+            input[type="number"], select {
+                background: #142850;
+                color: #e0e6f1;
+                border: 1px solid #3b82f6;
+                border-radius: 4px;
+                padding: 4px 6px;
+                font-size: 14px;
+                width: 80px;
+                margin-left: 6px;
+            }
+            select {
+                width: 120px;
+            }
+            #field {
+                background: #142850;
+                border: 3px solid #3b82f6;
+                margin-bottom: 10px;
+                cursor: crosshair;
+                touch-action: none;
+                display: block;
+                max-width: 100%;
+                height: auto;
+            }
+            #controls {
+                margin-bottom: 1rem;
+                text-align: center;
+            }
+
+            #timerDisplay {
+                margin: 10px 0;
+                font-size: 16px;
+                color: #e0e6f1;
+                text-align: center;
+            }
+            #encoderData {
+                background: #142850;
+                border: 2px solid #3b82f6;
+                border-radius: 8px;
+                padding: 15px;
+                margin-top: 20px;
+                max-width: 800px;
+                max-height: 400px;
+                overflow-y: auto;
+            }
+            #encoderData h3 {
+                color: #3b82f6;
+                margin-top: 0;
+            }
+            .encoder-row {
+                font-family: 'Courier New', monospace;
+                font-size: 12px;
+                padding: 4px 0;
+                border-bottom: 1px solid #1e40af;
+            }
+            .encoder-row:last-child {
+                border-bottom: none;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>VEX Path Planner with Live Data Recording Abilities</h1>
+
+        <div id="instructions">
+            Left-click: Add or drag waypoints<br />
+            Right-click a segment: toggle Bezier curve<br />
+            Drag dots: edit curve shape<br />
+            Save or load your path anytime<br />
+            <button id="playPauseBtn">Play</button>
+        </div>
+
+        <div id="controls" style="margin-bottom: 10px; text-align: center">
+            Robot Width (in):
+            <input
+                type="number"
+                id="robotWidthInput"
+                min="1"
+                max="11"
+                step="0.1"
+                value="10"
+            />
+            Robot Length (in):
+            <input
+                type="number"
+                id="robotLengthInput"
+                min="1"
+                max="20"
+                step="0.1"
+                value="15"
+            />
+            Robot Height (in):
+            <input
+                type="number"
+                id="robotHeightInput"
+                min="1"
+                max="15"
+                step="0.1"
+                value="15"
+            />
+            <br><br>
+            Gear Ratio:
+            <select id="gearRatioSelect">
+                <option value="1">1:1 (Direct - 120rpm)</option>
+                <option value="1.67">1:1.67 (72rpm)</option>
+                <option value="3">1:3 (40rpm)</option>
+                <option value="5">1:5 (24rpm)</option>
+                <option value="0.75">3:4 (160rpm)</option>
+                <option value="0.6">3:5 (200rpm)</option>
+                <option value="0.5">2:1 (240rpm)</option>
+                <option value="0.25">4:1 (480rpm)</option>
+                <option value="0.33">3:1 (360rpm)</option>
+                <option value="0.67" selected>3:2 (180rpm)</option>
+            </select>
+           
+            Wheel Diameter (in):
+            <input
+                type="number"
+                id="wheelDiameterInput"
+                min="1"
+                max="5"
+                step="0.1"
+                value="2.5"
+            />
+        </div>
+
+        <canvas id="field" width="1067" height="800"></canvas>
+
+        <div id="timerDisplay">Time: 0.00s | Distance: 0.0"</div>
+
+        <div id="controls" style="text-align: center">
+            <button id="clearBtn" class="clear-btn">Clear Path</button>
+            <button id="exportBtn" class="save-btn">Export Code</button>
+            <button id="loadBtn">Load Path</button>
+            <input
+                type="file"
+                id="fileInput"
+                style="display: none"
+                accept=".json"
+            />
+        </div>
+
+        <div id="encoderData">
+            <h3>Waypoint Data (Field Coordinates) based on VEX GPS System</h3>
+            <div id="encoderList">
+                <em>No data yet. Play animation to generate waypoint data.</em>
+            </div>
+        </div>
+
+        <script>
+            const canvas = document.getElementById("field");
+            const ctx = canvas.getContext("2d");
+            const gridSize = 1;
+            const cpRadius = 8;
+            const hitRadius = 10;
+
+            let waypoints = [];
+            let bezierSegments = new Set();
+            let controlPoints = {};
+            let draggingIndex = -1;
+            let draggingCP = null;
+            let offsetX, offsetY;
+
+            // Waypoint data storage (replaces encoder data)
+            let waypointData = [];
+            let totalDistance = 0;
+            let completedSegmentsDistance = 0;
+
+            // Field dimensions for VEX IQ (96" x 72")
+            const FIELD_WIDTH_INCHES = 96;
+            const FIELD_HEIGHT_INCHES = 72;
+            const PIXELS_PER_INCH = canvas.width / FIELD_WIDTH_INCHES;
+
+            // Robot configuration
+            let robotWidthInches = 10.5;
+            let robotLengthInches = 19.0;
+            let gearRatio = 0.67;
+            let wheelDiameter = 2.5;
+
+            // Animation state
+            let animationPlaying = false;
+            let animSegment = 0;
+            let animT = 0;
+            const targetSpeed = 200;
+            const frameRate = 60;
+            const animSpeed = targetSpeed / frameRate;
+
+            let robotPos = { x: 0, y: 0 };
+            let robotAngle = 0;
+
+            // Timer variables
+            let startTime = 0;
+            let timerInterval = null;
+            const timerDisplay = document.getElementById("timerDisplay");
+
+            function drawVEXIQField() {
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                const tileSize = 12 * PIXELS_PER_INCH;
+                ctx.strokeStyle = '#1f2937';
+                ctx.lineWidth = 4;
+                
+                for (let row = 0; row < 6; row++) {
+                    for (let col = 0; col < 8; col++) {
+                        const x = col * tileSize;
+                        const y = row * tileSize;
+                        ctx.strokeRect(x, y, tileSize, tileSize);
+                        
+                        ctx.strokeStyle = '#4b5563';
+                        ctx.lineWidth = 1;
+                        const subGrid = tileSize / 4;
+                        for (let i = 1; i < 4; i++) {
+                            ctx.beginPath();
+                            ctx.moveTo(x + i * subGrid, y);
+                            ctx.lineTo(x + i * subGrid, y + tileSize);
+                            ctx.stroke();
+                            ctx.beginPath();
+                            ctx.moveTo(x, y + i * subGrid);
+                            ctx.lineTo(x + tileSize, y + i * subGrid);
+                            ctx.stroke();
+                        }
+                        ctx.strokeStyle = '#1f2937';
+                        ctx.lineWidth = 4;
+                    }
+                }
+                
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 8;
+                ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
+                
+                const centerSize = 24 * PIXELS_PER_INCH;
+                const centerX = (canvas.width - centerSize) / 2;
+                const centerY = (canvas.height - centerSize) / 2;
+                ctx.fillStyle = '#fbbf24';
+                ctx.fillRect(centerX, centerY, centerSize, centerSize);
+                ctx.strokeStyle = '#d97706';
+                ctx.lineWidth = 4;
+                ctx.strokeRect(centerX, centerY, centerSize, centerSize);
+                
+                const goalSize = 8 * PIXELS_PER_INCH;
+                
+                ctx.fillStyle = '#3b82f6';
+                ctx.fillRect(0, 0, goalSize, goalSize);
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 4;
+                ctx.strokeRect(0, 0, goalSize, goalSize);
+                
+                ctx.fillStyle = '#ef4444';
+                ctx.fillRect(canvas.width - goalSize, 0, goalSize, goalSize);
+                ctx.strokeRect(canvas.width - goalSize, 0, goalSize, goalSize);
+                
+                const triangleSize = 12 * PIXELS_PER_INCH;
+                
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath();
+                ctx.moveTo(0, canvas.height);
+                ctx.lineTo(triangleSize, canvas.height);
+                ctx.lineTo(0, canvas.height - triangleSize);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                
+                ctx.fillStyle = '#3b82f6';
+                ctx.beginPath();
+                ctx.moveTo(canvas.width, canvas.height);
+                ctx.lineTo(canvas.width - triangleSize, canvas.height);
+                ctx.lineTo(canvas.width, canvas.height - triangleSize);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            }
+
+            function createDefaultControlPoints(p0, p1) {
+                const dx = p1.x - p0.x,
+                    dy = p1.y - p0.y,
+                    len = Math.sqrt(dx * dx + dy * dy);
+                if (len === 0) return [{ ...p0 }, { ...p1 }];
+                const nx = -dy / len,
+                    ny = dx / len;
+                return [
+                    {
+                        x: p0.x + dx * 0.3 + nx * 30,
+                        y: p0.y + dy * 0.3 + ny * 30,
+                    },
+                    {
+                        x: p0.x + dx * 0.7 + nx * 30,
+                        y: p0.y + dy * 0.7 + ny * 30,
+                    },
+                ];
+            }
+
+            function cubicBezierPoint(p0, c0, c1, p1, t) {
+                const u = 1 - t;
+                const tt = t * t;
+                const uu = u * u;
+                const uuu = uu * u;
+                const ttt = tt * t;
+
+                let x = uuu * p0.x;
+                x += 3 * uu * t * c0.x;
+                x += 3 * u * tt * c1.x;
+                x += ttt * p1.x;
+
+                let y = uuu * p0.y;
+                y += 3 * uu * t * c0.y;
+                y += 3 * u * tt * c1.y;
+                y += ttt * p1.y;
+
+                return { x, y };
+            }
+
+            function cubicBezierTangent(p0, c0, c1, p1, t) {
+                const u = 1 - t;
+                let x =
+                    3 * u * u * (c0.x - p0.x) +
+                    6 * u * t * (c1.x - c0.x) +
+                    3 * t * t * (p1.x - c1.x);
+                let y =
+                    3 * u * u * (c0.y - p0.y) +
+                    6 * u * t * (c1.y - c0.y) +
+                    3 * t * t * (p1.y - c1.y);
+                return { x, y };
+            }
+
+            function getSegmentLength(p0, p1, isBezier, cps) {
+                if (!isBezier) {
+                    const dx = p1.x - p0.x;
+                    const dy = p1.y - p0.y;
+                    return Math.sqrt(dx * dx + dy * dy);
+                }
+                const samples = 100;
+                let length = 0;
+                let prev = p0;
+                for (let i = 1; i <= samples; i++) {
+                    const t = i / samples;
+                    const curr = cubicBezierPoint(p0, cps[0], cps[1], p1, t);
+                    const dx = curr.x - prev.x;
+                    const dy = curr.y - prev.y;
+                    length += Math.sqrt(dx * dx + dy * dy);
+                    prev = curr;
+                }
+                return length;
+            }
+
+            function pixelsToInches(pixels) {
+                return pixels / PIXELS_PER_INCH;
+            }
+
+            function canvasToFieldCoords(x, y) {
+                return {
+                    x: pixelsToInches(x),
+                    y: pixelsToInches(canvas.height - y)
+                };
+            }
+
+            function logWaypointData(x, y, heading, time) {
+                const fieldCoords = canvasToFieldCoords(x, y);
+                waypointData.push({
+                    time: time.toFixed(2),
+                    x: fieldCoords.x.toFixed(2),
+                    y: fieldCoords.y.toFixed(2),
+                    heading: ((heading * 180 / Math.PI) % 360).toFixed(1)
+                });
+                updateWaypointDisplay();
+            }
+
+            function updateWaypointDisplay() {
+                const list = document.getElementById('encoderList');
+                if (waypointData.length === 0) {
+                    list.innerHTML = '<em>No data yet. Play animation to generate waypoint data.</em>';
+                    return;
+                }
+                
+                let html = '';
+                waypointData.forEach((entry, idx) => {
+                    html += `<div class="encoder-row">
+                        ${idx + 1}. X: ${entry.x}", Y: ${entry.y}", Heading: ${entry.heading}° | Time: ${entry.time}s
+                    </div>`;
+                });
+                list.innerHTML = html;
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                drawVEXIQField();
+
+                if (waypoints.length > 1) {
+                    ctx.lineWidth = 3;
+                    for (let i = 0; i < waypoints.length - 1; i++) {
+                        const p0 = waypoints[i],
+                            p1 = waypoints[i + 1];
+                        if (bezierSegments.has(i)) {
+                            ctx.strokeStyle = "#3b82f6";
+                            const cps =
+                                controlPoints[i] ||
+                                createDefaultControlPoints(p0, p1);
+                            controlPoints[i] = cps;
+                            ctx.beginPath();
+                            ctx.moveTo(p0.x, p0.y);
+                            ctx.bezierCurveTo(
+                                cps[0].x,
+                                cps[0].y,
+                                cps[1].x,
+                                cps[1].y,
+                                p1.x,
+                                p1.y,
+                            );
+                            ctx.stroke();
+
+                            ctx.strokeStyle = "#60a5fa";
+                            ctx.lineWidth = 1;
+                            ctx.beginPath();
+                            ctx.moveTo(p0.x, p0.y);
+                            ctx.lineTo(cps[0].x, cps[0].y);
+                            ctx.moveTo(p1.x, p1.y);
+                            ctx.lineTo(cps[1].x, cps[1].y);
+                            ctx.stroke();
+
+                            ctx.fillStyle = "#60a5fa";
+                            cps.forEach((cp) => {
+                                ctx.beginPath();
+                                ctx.arc(cp.x, cp.y, cpRadius, 0, Math.PI * 2);
+                                ctx.fill();
+                            });
+                            ctx.lineWidth = 3;
+                        } else {
+                            ctx.strokeStyle = "#1e40af";
+                            ctx.beginPath();
+                            ctx.moveTo(p0.x, p0.y);
+                            ctx.lineTo(p1.x, p1.y);
+                            ctx.stroke();
+                        }
+                    }
+                }
+
+                for (let i = 0; i < waypoints.length; i++) {
+                    ctx.fillStyle = "#3b82f6";
+                    ctx.beginPath();
+                    ctx.arc(waypoints[i].x, waypoints[i].y, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = "#ffffff";
+                    ctx.font = "12px 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.fillText(i + 1, waypoints[i].x, waypoints[i].y);
+                }
+
+                if (animationPlaying && waypoints.length > 0) {
+                    drawRobot(robotPos.x, robotPos.y, robotAngle);
+                }
+            }
+
+            function drawRobot(x, y, angle) {
+                const widthPx = robotWidthInches * PIXELS_PER_INCH;
+                const lengthPx = robotLengthInches * PIXELS_PER_INCH;
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.rotate(angle);
+                ctx.fillStyle = "#ef4444";
+                ctx.fillRect(-lengthPx / 2, -widthPx / 2, lengthPx, widthPx);
+                ctx.strokeStyle = "#ffffff";
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(lengthPx * 0.6, 0);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(lengthPx * 0.6, 0);
+                ctx.lineTo(lengthPx * 0.5, -10);
+                ctx.lineTo(lengthPx * 0.5, 10);
+                ctx.closePath();
+                ctx.fillStyle = "#ffffff";
+                ctx.fill();
+                ctx.restore();
+            }
+
+            function startTimer() {
+                startTime = performance.now();
+                timerInterval = setInterval(() => {
+                    const elapsed = (performance.now() - startTime) / 1000;
+                    timerDisplay.textContent = `Time: ${elapsed.toFixed(2)}s | Distance: ${totalDistance.toFixed(1)}"`;
+                }, 100);
+            }
+
+            function stopTimer() {
+                if (timerInterval) {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                }
+            }
+
+            function animateRobot() {
+                if (!animationPlaying || waypoints.length < 2) {
+                    stopTimer();
+                    return;
+                }
+
+                const p0 = waypoints[animSegment];
+                const p1 = waypoints[animSegment + 1];
+
+                let pos, tangent;
+
+                const isBezier = bezierSegments.has(animSegment);
+                const cps = isBezier
+                    ? controlPoints[animSegment] || createDefaultControlPoints(p0, p1)
+                    : null;
+                const segmentLength = getSegmentLength(p0, p1, isBezier, cps);
+
+                const tIncrement = segmentLength > 0 ? animSpeed / segmentLength : 0;
+
+                if (isBezier) {
+                    pos = cubicBezierPoint(p0, cps[0], cps[1], p1, animT);
+                    tangent = cubicBezierTangent(p0, cps[0], cps[1], p1, animT);
+                } else {
+                    const x = p0.x + (p1.x - p0.x) * animT;
+                    const y = p0.y + (p1.y - p0.y) * animT;
+                    pos = { x, y };
+                    tangent = { x: p1.x - p0.x, y: p1.y - p0.y };
+                }
+
+                robotPos = pos;
+                robotAngle = Math.atan2(tangent.y, tangent.x);
+
+                // Calculate distance traveled (FIXED)
+                if (animT === 0 && animSegment === 0) {
+                    totalDistance = 0;
+                    completedSegmentsDistance = 0;
+                }
+
+                if (animT < tIncrement && animSegment > 0) {
+                    const prevIdx = animSegment - 1;
+                    const prevP0 = waypoints[prevIdx];
+                    const prevP1 = waypoints[prevIdx + 1];
+                    const prevIsBezier = bezierSegments.has(prevIdx);
+                    const prevCps = prevIsBezier ? controlPoints[prevIdx] : null;
+                    const prevLength = getSegmentLength(prevP0, prevP1, prevIsBezier, prevCps);
+                    completedSegmentsDistance += pixelsToInches(prevLength);
+                }
+
+                const distancePixels = animT * segmentLength;
+                const currentSegmentInches = pixelsToInches(distancePixels);
+                totalDistance = completedSegmentsDistance + currentSegmentInches;
+
+                // Log waypoint data at key points
+                if (animT % 0.1 < tIncrement || animT === 0) {
+                    const currentTime = (performance.now() - startTime) / 1000;
+                    logWaypointData(robotPos.x, robotPos.y, robotAngle, currentTime);
+                }
+
+                animT += tIncrement;
+                if (animT > 1) {
+                    animT = 0;
+                    animSegment++;
+                    if (animSegment >= waypoints.length - 1) {
+                        animationPlaying = false;
+                        playPauseBtn.textContent = "Play";
+                        stopTimer();
+                        draw();
+                        return;
+                    }
+                }
+
+                draw();
+                requestAnimationFrame(animateRobot);
+            }
+
+            // Play/Pause button
+            const playPauseBtn = document.getElementById("playPauseBtn");
+            playPauseBtn.onclick = () => {
+                if (animationPlaying) {
+                    animationPlaying = false;
+                    playPauseBtn.textContent = "Play";
+                    stopTimer();
+                    draw();
+                } else {
+                    if (waypoints.length < 2) {
+                        alert("Add at least 2 waypoints to play the animation.");
+                        return;
+                    }
+                    animationPlaying = true;
+                    playPauseBtn.textContent = "Pause";
+                    animSegment = 0;
+                    animT = 0;
+                    waypointData = [];
+                    totalDistance = 0;
+                    completedSegmentsDistance = 0;
+                    startTimer();
+                    animateRobot();
+                }
+            };
+
+            // Robot size inputs
+            document.getElementById("robotWidthInput").addEventListener("input", (e) => {
+                const val = parseFloat(e.target.value);
+                if (!isNaN(val) && val >= 1 && val <= 18) {
+                    robotWidthInches = val;
+                    draw();
+                }
+            });
+
+            document.getElementById("robotLengthInput").addEventListener("input", (e) => {
+                const val = parseFloat(e.target.value);
+                if (!isNaN(val) && val >= 1 && val <= 20) {
+                    robotLengthInches = val;
+                    draw();
+                }
+            });
+
+            document.getElementById("gearRatioSelect").addEventListener("change", (e) => {
+                gearRatio = parseFloat(e.target.value);
+            });
+
+            document.getElementById("wheelDiameterInput").addEventListener("input", (e) => {
+                const val = parseFloat(e.target.value);
+                if (!isNaN(val) && val >= 1 && val <= 5) {
+                    wheelDiameter = val;
+                }
+            });
+
+            function getMousePos(evt) {
+                const rect = canvas.getBoundingClientRect();
+                return {
+                    x: evt.clientX - rect.left,
+                    y: evt.clientY - rect.top,
+                };
+            }
+
+            function findWaypoint(x, y) {
+                return waypoints.findIndex(
+                    (p) => Math.hypot(p.x - x, p.y - y) < 10,
+                );
+            }
+
+            function findControlPoint(x, y) {
+                for (const [i, cps] of Object.entries(controlPoints)) {
+                    for (let j = 0; j < 2; j++) {
+                        if (
+                            Math.hypot(cps[j].x - x, cps[j].y - y) <
+                            cpRadius + 4
+                        ) {
+                            return { segmentIndex: +i, cpIndex: j };
+                        }
+                    }
+                }
+                return null;
+            }
+
+            function pointNearSegment(p, a, b, threshold) {
+                const ABx = b.x - a.x,
+                    ABy = b.y - a.y;
+                const APx = p.x - a.x,
+                    APy = p.y - a.y;
+                const ab2 = ABx * ABx + ABy * ABy;
+                let t = (APx * ABx + APy * ABy) / ab2;
+                t = Math.max(0, Math.min(1, t));
+                const closest = { x: a.x + ABx * t, y: a.y + ABy * t };
+                return (
+                    Math.hypot(p.x - closest.x, p.y - closest.y) <= threshold
+                );
+            }
+
+            canvas.addEventListener("mousedown", (evt) => {
+                const pos = getMousePos(evt);
+                if (evt.button === 0) {
+                    const cp = findControlPoint(pos.x, pos.y);
+                    if (cp) {
+                        draggingCP = cp;
+                        offsetX =
+                            pos.x -
+                            controlPoints[cp.segmentIndex][cp.cpIndex].x;
+                        offsetY =
+                            pos.y -
+                            controlPoints[cp.segmentIndex][cp.cpIndex].y;
+                        return;
+                    }
+                    const idx = findWaypoint(pos.x, pos.y);
+                    if (idx >= 0) {
+                        draggingIndex = idx;
+                        offsetX = pos.x - waypoints[idx].x;
+                        offsetY = pos.y - waypoints[idx].y;
+                    } else {
+                        waypoints.push({
+                            x: Math.round(pos.x / gridSize) * gridSize,
+                            y: Math.round(pos.y / gridSize) * gridSize,
+                        });
+                    }
+                    draw();
+                }
+            });
+
+            canvas.addEventListener("mousemove", (evt) => {
+                const pos = getMousePos(evt);
+                if (draggingCP) {
+                    const cp =
+                        controlPoints[draggingCP.segmentIndex][
+                            draggingCP.cpIndex
+                        ];
+                    cp.x = pos.x - offsetX;
+                    cp.y = pos.y - offsetY;
+                    draw();
+                } else if (draggingIndex >= 0) {
+                    waypoints[draggingIndex].x =
+                        Math.round((pos.x - offsetX) / gridSize) * gridSize;
+                    waypoints[draggingIndex].y =
+                        Math.round((pos.y - offsetY) / gridSize) * gridSize;
+                    draw();
+                }
+            });
+
+            canvas.addEventListener("mouseup", () => {
+                draggingIndex = -1;
+                draggingCP = null;
+            });
+
+            canvas.addEventListener("contextmenu", (evt) => {
+                evt.preventDefault();
+                const pos = getMousePos(evt);
+                for (let i = 0; i < waypoints.length - 1; i++) {
+                    if (
+                        pointNearSegment(
+                            pos,
+                            waypoints[i],
+                            waypoints[i + 1],
+                            hitRadius,
+                        )
+                    ) {
+                        if (bezierSegments.has(i)) {
+                            bezierSegments.delete(i);
+                            delete controlPoints[i];
+                        } else {
+                            bezierSegments.add(i);
+                            controlPoints[i] = createDefaultControlPoints(
+                                waypoints[i],
+                                waypoints[i + 1],
+                            );
+                        }
+                        draw();
+                        break;
+                    }
+                }
+            });
+
+            // Clear button
+            document.getElementById("clearBtn").addEventListener("click", () => {
+                waypoints = [];
+                bezierSegments.clear();
+                controlPoints = {};
+                waypointData = [];
+                totalDistance = 0;
+                completedSegmentsDistance = 0;
+                animationPlaying = false;
+                animSegment = 0;
+                animT = 0;
+                playPauseBtn.textContent = "Play";
+                stopTimer();
+                updateWaypointDisplay();
+                draw();
+            });
+
+            // Export Code button
+            document.getElementById("exportBtn").addEventListener("click", () => {
+                if (waypointData.length === 0) {
+                    alert("No waypoint data to export. Play the animation first to generate waypoint data.");
+                    return;
+                }
+
+                // Generate C++ code
+                let code = `// AUTO-GENERATED VEX IQ AUTONOMOUS CODE
+// Generated from VEX Path Planner
+// Date: ${new Date().toLocaleString()}
+
+// ============================================
+// ROBOT CONFIGURATION - EDIT THESE VALUES
+// ============================================
+const double WHEEL_DIAMETER = ${wheelDiameter};  // inches
+const double GEAR_RATIO = ${gearRatio};          // motor:wheel ratio
+const double TRACK_WIDTH = ${robotWidthInches};  // distance between wheels (inches)
+
+// ============================================
+// GLOBAL ODOMETRY VARIABLES
+// ============================================
+double robotX = 0.0;
+double robotY = 0.0;
+double robotHeading = 0.0;
+
+// ============================================
+// TODO: ADD THESE HELPER FUNCTIONS TO YOUR CODE
+// ============================================
+// You need to implement these functions in your robot code:
+// - void updateOdometry()        // Updates robot position using encoders + inertial
+// - void driveToPoint(x, y)      // Drives robot to specified coordinates
+// 
+// Reference: See VEX IQ odometry documentation or your team's library
+
+// ============================================
+// AUTONOMOUS ROUTINE - GENERATED WAYPOINTS
+// ============================================
+void autonomous() {
+    // TODO: Initialize your odometry system
+    // Set starting position based on your field placement
+    robotX = ${waypointData[0].x};
+    robotY = ${waypointData[0].y};
+    robotHeading = ${waypointData[0].heading};
+    
+    // Generated waypoints from path planner
+`;
+
+                // Add waypoint calls
+                waypointData.forEach((wp, idx) => {
+                    code += `    driveToPoint(${wp.x}, ${wp.y});  // Waypoint ${idx + 1}\n`;
+                });
+
+                code += `}
+
+// ============================================
+// EXAMPLE HELPER FUNCTIONS (REFERENCE)
+// ============================================
+// Copy these to your robot code and customize as needed
+
+/*
+void updateOdometry() {
+    // Get encoder distances
+    double leftDist = leftMotor.position(degrees) / GEAR_RATIO / 360.0 * (WHEEL_DIAMETER * 3.14159);
+    double rightDist = rightMotor.position(degrees) / GEAR_RATIO / 360.0 * (WHEEL_DIAMETER * 3.14159);
+    
+    // Get current heading from inertial sensor
+    double heading = inertial.heading(degrees);
+    
+    // Calculate distance traveled
+    double avgDist = (leftDist + rightDist) / 2.0;
+    
+    // Update position
+    robotX += avgDist * cos(heading * 3.14159 / 180.0);
+    robotY += avgDist * sin(heading * 3.14159 / 180.0);
+    robotHeading = heading;
+}
+
+void driveToPoint(double targetX, double targetY) {
+    while (true) {
+        updateOdometry();
+        
+        // Calculate distance and angle to target
+        double deltaX = targetX - robotX;
+        double deltaY = targetY - robotY;
+        double distance = sqrt(deltaX * deltaX + deltaY * deltaY);
+        
+        double targetAngle = atan2(deltaY, deltaX) * 180.0 / 3.14159;
+        double angleError = targetAngle - robotHeading;
+        
+        // Normalize angle error
+        while (angleError > 180) angleError -= 360;
+        while (angleError < -180) angleError += 360;
+        
+        // Check if reached target
+        if (distance < 2.0) {  // Within 2 inches
+            leftMotor.stop();
+            rightMotor.stop();
+            break;
+        }
+        
+        // Calculate motor powers with proportional control
+        double forwardPower = distance * 10;  // Tune this multiplier
+        double turnPower = angleError * 2;    // Tune this multiplier
+        
+        // Limit powers
+        if (forwardPower > 100) forwardPower = 100;
+        if (turnPower > 50) turnPower = 50;
+        
+        // Apply to motors
+        leftMotor.spin(forward, forwardPower + turnPower, percent);
+        rightMotor.spin(forward, forwardPower - turnPower, percent);
+        
+        wait(20, msec);
+    }
+}
+*/
+
+// ============================================
+// NOTES:
+// ============================================
+// - Tune the proportional control multipliers for your robot
+// - Add PID control for smoother movement
+// - Consider adding timeout protection
+// - Test each waypoint individually before running full path
+// - Adjust starting position (robotX, robotY) based on field placement
+`;
+
+                // Download the code
+                const blob = new Blob([code], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'vex_auton_code.cpp';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                alert('Code exported successfully! Check your downloads folder for vex_auton_code.cpp');
+            });
+
+            // Load button
+            document.getElementById("loadBtn").addEventListener("click", () => {
+                document.getElementById("fileInput").click();
+            });
+
+            document.getElementById("fileInput").addEventListener("change", (evt) => {
+                const file = evt.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = JSON.parse(e.target.result);
+                        waypoints = data.waypoints || [];
+                        bezierSegments = new Set(data.bezierSegments || []);
+                        controlPoints = data.controlPoints || {};
+                        if (data.robotWidth) robotWidthInches = data.robotWidth;
+                        if (data.robotLength) robotLengthInches = data.robotLength;
+                        if (data.gearRatio) gearRatio = data.gearRatio;
+                        if (data.wheelDiameter) wheelDiameter = data.wheelDiameter;
+                        
+                        document.getElementById("robotWidthInput").value = robotWidthInches;
+                        document.getElementById("robotLengthInput").value = robotLengthInches;
+                        document.getElementById("wheelDiameterInput").value = wheelDiameter;
+                        
+                        draw();
+                    } catch (err) {
+                        alert("Error loading file: " + err.message);
+                    }
+                };
+                reader.readAsText(file);
+                evt.target.value = "";
+            });
+
+            // Initial draw
+            draw();
+        </script>
+    </body>
+</html>
